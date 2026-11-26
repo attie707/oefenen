@@ -21,3 +21,8 @@ body.m-oekraiens .top{border-bottom:4px solid #ffd700}
 .switch{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink2);cursor:pointer}
 .switch input{width:auto}
 @media (max-width:520px){.cyr{font-size:32px}.letter-big{font-size:70px}.options.letter .opt{font-size:24px}.kbd button{font-size:16px;padding:9px 0}}
+
+/* lessons */
+.blk.g{background:#fde0ef;color:#8a1f5c}
+.ex .tr{margin:2px 0 0 2px}
+.prompt .tr{font-size:15px}

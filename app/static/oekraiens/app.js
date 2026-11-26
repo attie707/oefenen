@@ -131,7 +131,7 @@ async function render() {
   if (HOME.lang && HOME.lang !== LANG) { LANG = HOME.lang; document.documentElement.lang = LANG;
     $("#nav-abc").textContent = t("abc"); $("#nav-scores").textContent = t("scores"); $("#nav-staff").textContent = t("students"); }
   const [route, a, c] = location.hash.replace(/^#\/?/, "").split("/");
-  const views = { "": viewHome, groep: viewGroup, oefen: viewPlay, abetka: viewAlphabet, scores: viewScores };
+  const views = { "": viewHome, groep: viewGroup, oefen: viewPlay, abetka: viewAlphabet, scores: viewScores, lessons: viewLessons, les: viewLesson };
   (views[route] || viewHome)(a, c);
 }
 
@@ -143,6 +143,9 @@ function viewHome() {
     <div class="chips"><span class="chip">${t("streak", h.streak)}</span><span class="chip">${t("points", h.xp)}</span>
       <span class="chip">${t("today")}: ${h.today} / ${h.goal} ${goal >= 100 ? "✅" : ""}</span></div>
     <div class="bar ${goal >= 100 ? "good" : ""}" style="margin:-4px 0 18px"><i style="width:${goal}%"></i></div>
+    <a class="card tile" href="#/lessons" style="margin-bottom:12px;display:block">
+      <div class="spread"><h3>📘 Lessons</h3><span class="chip">${h.lessons_done} / ${h.lessons_total} ✅</span></div>
+      <div class="muted small">How Ukrainian works, step by step: reading Cyrillic, "this is", he/she/it, verbs, questions, "not" and "I have". Start here.</div></a>
     <div class="grid">
       ${h.groups.map(g => `<a class="card tile" href="#/groep/${g.key}"><div class="ico">${g.icon}</div><h3>${esc(g.title)}</h3><div class="muted small">${esc(g.desc)}</div></a>`).join("")}
       <a class="card tile" href="#/abetka"><div class="ico">📜</div><h3>${t("abc_title").replace("🔤 ", "")}</h3><div class="muted small">А Б В Г Ґ Д Е Є Ж З И І Ї Й …</div></a>
@@ -325,6 +328,120 @@ async function viewScores(uid) {
     <div class="card">${s.mistakes.length ? `<div class="tablewrap"><table class="list"><tr><th>${t("question")}</th><th>${t("answer")}</th><th>${t("right_is")}</th></tr>
       ${s.mistakes.map(m => `<tr><td>${esc(m.prompt)}</td><td><s>${esc(m.given) || t("empty")}</s></td><td><b>${esc(m.expected)}</b></td></tr>`).join("")}
       </table></div>` : `<p class="muted">${t("no_mistakes")}</p>`}</div>`;
+}
+
+// ---------- lessons (explanations in English) ----------
+const ROLE_NAMES = { s: "who", v: "verb", n: "не / ні (not / no)", q: "question word", c: "це / є", g: "my (мій / моя / моє)", t: "place / time", r: "rest" };
+const sentHTML = parts => `<div class="sent">${parts.map(([w, r]) => `<span class="blk ${r}">${esc(w)}</span>`).join("")}</div>`;
+const normSent = x => x.toLowerCase().replace(/[.,?!]/g, " ").split(/\s+/).filter(Boolean).join(" ");
+
+async function viewLessons() {
+  const list = await api("lessons");
+  const next = (list.find(l => !l.done) || {}).id;
+  app.innerHTML = `<a href="#/">${t("back")}</a><h1>📘 Lessons</h1>
+    <p class="muted">Short lessons about how Ukrainian works, for an English speaker. Each lesson: a few cards with examples, then a little practice.
+      Do them in order: each lesson builds on the one before. Tap 🔊 to hear every example.</p>
+    <div class="row" style="justify-content:flex-end">${latinSwitch()}</div>
+    <div class="grid" style="margin-top:12px">${list.map(l => `<a class="card tile ${l.id === next ? "sel" : ""}" href="#/les/${l.id}">
+      <div class="spread"><h3>${esc(l.title)}</h3>${l.done ? "✅" : l.tried ? "🔁" : ""}</div>
+      <div class="muted small">${esc(l.short)}${l.id === next ? " · 👉 <b>next</b>" : ""}</div></a>`).join("")}</div>`;
+  bindLatin();
+}
+
+async function viewLesson(id) {
+  const L = await api("lesson?id=" + encodeURIComponent(id));
+  const steps = [...L.cards.map(c => ({ kind: "card", c })), ...L.practice.map(p => ({ kind: "practice", p }))];
+  let i = 0, score = 0;
+  const dots = () => `<div class="steps-dots">${steps.map((_, k) => `<i class="${k === i ? "on" : k < i ? "done" : ""}"></i>`).join("")}</div>`;
+  function draw() {
+    if (i >= steps.length) return finish();
+    const st = steps[i];
+    const head = `<div class="qhead"><a href="#/lessons">← Lessons</a><span class="small muted">${esc(L.title)}</span></div>${dots()}
+      <div class="row" style="justify-content:flex-end;margin-bottom:6px">${latinSwitch()}</div>`;
+    if (st.kind === "card") {
+      const c = st.c;
+      const roles = [...new Set(c.examples.flatMap(e => e.parts.map(p => p[1])))];
+      app.innerHTML = `${head}<div class="card"><h2 style="margin-top:0">${esc(c.title)}</h2>
+        <p class="lesson-text">${esc(c.text)}</p>
+        ${c.examples.map(e => `<div class="ex"><div class="row" style="flex-wrap:nowrap;align-items:flex-start">${sentHTML(e.parts)}${sayBtn(e.say)}</div>${tr(e.tr)}<div class="en">${esc(e.en)}</div></div>`).join("")}
+        ${c.tip ? `<div class="tipbox">💡 ${esc(c.tip)}</div>` : ""}
+        ${roles.length > 1 ? `<div class="roles">${roles.map(r => `<span class="blk ${r}">${ROLE_NAMES[r]}</span>`).join("")}</div>` : ""}
+        <div class="row" style="justify-content:space-between;margin-top:14px">
+          <button class="secondary" id="prev" ${i === 0 ? "disabled" : ""}>← Back</button><button id="nxt">Next →</button></div></div>`;
+      bindLatin();
+      $("#prev").onclick = () => { i--; draw(); };
+      $("#nxt").onclick = () => { i++; draw(); };
+      return;
+    }
+    const p = st.p;
+    const n = i - L.cards.length + 1;
+    let answered = false;
+    const done = (ok, why, text) => {
+      answered = true; if (ok) score++;
+      $("#fb").innerHTML = `<div class="feedback ${ok ? "correct" : "wrong"} pop"><div class="title">${ok ? "✅ " + pick(t("praise")) : "❌ " + pick(t("oops"))}</div>
+        ${why ? `<div class="why">${esc(why)}</div>` : ""}${text ? `<div class="sol" style="font-size:19px;margin-top:6px">${esc(text)} ${sayBtn(text)}</div>` : ""}</div>
+        <button class="next" id="nx">${t("next")}</button>`;
+      $("#nx").onclick = () => { i++; draw(); };
+      if (text) say(text);
+    };
+    if (p.type === "choice") {
+      app.innerHTML = `${head}<div class="card"><div class="small muted">Practice ${n} of ${L.practice.length}</div>
+        <div class="prompt"><div class="nl big">${esc(p.q)}</div>${tr(p.q_tr)}</div>
+        <div class="options ${p.options.length === 2 ? "two" : ""}">${p.options.map((o, k) => `<button class="opt" data-k="${k}"><span class="n">${k + 1}</span>${esc(o)}${p.opt_tr && p.opt_tr[k] && p.opt_tr[k] !== o ? `<span class="tr">${esc(p.opt_tr[k])}</span>` : ""}</button>`).join("")}</div>
+        <div id="fb"></div></div>`;
+      bindLatin();
+      app.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+        if (answered) return;
+        const k = +b.dataset.k;
+        app.querySelectorAll(".opt").forEach((x, j) => { x.disabled = true; if (j === p.answer) x.classList.add("right"); else if (j === k) x.classList.add("wrong"); });
+        done(k === p.answer, p.why, p.say || "");
+      });
+    } else {
+      const words = p.tiles;
+      let order = words.map((_, k) => k);
+      for (let x = 0; x < 10 && order.every((v, k) => v === k); x++) order.sort(() => Math.random() - .5);
+      let built = [];
+      const end = /[?]$/.test(p.uk) ? "?" : /!$/.test(p.uk) ? "!" : ".";
+      const tileHTML = (k, attr) => `<button class="tilebtn" ${attr}>${esc(words[k])}<span class="tr">${esc(p.tiles_tr[k])}</span></button>`;
+      app.innerHTML = `${head}<div class="card"><div class="small muted">Practice ${n} of ${L.practice.length}</div>
+        <div class="prompt"><div class="small muted">Make this sentence in Ukrainian:</div><div class="nl big">${esc(p.en)}</div></div>
+        <div class="build-line" id="line"></div>
+        <div class="tiles" id="tiles">${order.map(k => tileHTML(k, `data-t="${k}"`)).join("")}</div>
+        <div class="row" style="justify-content:center;margin-top:14px"><button class="secondary" id="clear">${t("restart")}</button><button id="check">${t("check")}</button></div>
+        <div id="fb"></div></div>`;
+      bindLatin();
+      const drawLine = () => {
+        $("#line").innerHTML = built.map((k, j) => tileHTML(k, `data-b="${j}"`)).join("") +
+          (built.length ? `<span class="end">${end}</span>` : `<span class="muted small">${t("tap_words")}</span>`);
+        app.querySelectorAll("#tiles .tilebtn").forEach(b => b.classList.toggle("used", built.includes(+b.dataset.t)));
+        app.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { if (!answered) { built.splice(+b.dataset.b, 1); drawLine(); } });
+      };
+      app.querySelectorAll("#tiles .tilebtn").forEach(b => b.onclick = () => { const k = +b.dataset.t; if (!answered && !built.includes(k)) { built.push(k); drawLine(); } });
+      $("#clear").onclick = () => { if (!answered) { built = []; drawLine(); } };
+      $("#check").onclick = () => {
+        if (answered) return;
+        if (built.length < words.length) return toast(t("use_all"));
+        const given = normSent(built.map(k => words[k]).join(" "));
+        const ok = [p.uk, ...(p.alts || [])].some(x => normSent(x) === given);
+        $("#check").disabled = true; $("#clear").disabled = true;
+        done(ok, ok ? "" : "Look at the coloured blocks in the lesson once more.", p.uk);
+      };
+      drawLine();
+    }
+  }
+  async function finish() {
+    const r = await api("lesson/done", { id: L.id, score, total: L.practice.length });
+    const [pex, pfocus] = (L.practise || "").split("/");
+    app.innerHTML = `<div class="card center" style="margin-top:20px"><div style="font-size:56px">${r.passed ? "🎉" : "💪"}</div>
+      <h2>${esc(L.title)}</h2><p>${score} of ${L.practice.length} correct${r.xp_gained ? ` · +${r.xp_gained} points` : ""}</p>
+      <p class="muted">${r.passed ? "Lesson done! Now practise it a bit more, so it sticks." : "Read the cards once more and try again. You'll get there!"}</p>
+      <div class="row" style="justify-content:center">
+        ${r.passed ? "" : `<a class="btn" href="#/les/${L.id}" onclick="setTimeout(render)">↺ Try again</a>`}
+        ${pex ? `<a class="btn ${r.passed ? "" : "secondary"}" href="#/oefen/${pex}/${pfocus || "alle"}">🧩 Practise more</a>` : ""}
+        ${L.next ? `<a class="btn secondary" href="#/les/${L.next}">Next lesson →</a>` : ""}
+        <a class="btn secondary" href="#/lessons">All lessons</a></div></div>`;
+  }
+  draw();
 }
 
 render();

@@ -4,6 +4,7 @@ import re
 import engine as E
 from engine import ApiError
 from . import content as C
+from . import lessons as L
 
 KEY = "oekraiens"
 ICON = "🇺🇦"
@@ -14,14 +15,20 @@ TTS_LANG, TTS_AZURE, TTS_PIPER = "uk-UA", "uk-UA-PolinaNeural", "uk_UA-ukrainian
 # The family learns Ukrainian through English. Set to None to follow each user's language setting (en/nl) instead.
 FIXED_LANG = "en"
 MODE_NAMES = {k: v["en"][0] for k, v in C.EXERCISES.items()}
+GET_ACTIONS = ("lessons", "lesson")
 
 
 def phrases():
-    return C.all_phrases()
+    return C.all_phrases() | L.phrases()
+
+
+def lesson_status(con, uid):
+    rows = con.execute("SELECT key, box FROM progress WHERE user_id=? AND module=? AND key LIKE 'les:%'", (uid, KEY)).fetchall()
+    return {r["key"][4:]: r["box"] for r in rows}
 
 
 def weak_set(con, uid):
-    return {k.split(":", 1)[1] for k in E.weak_keys(con, uid, KEY)}
+    return {k.split(":", 1)[1] for k in E.weak_keys(con, uid, KEY) if not k.startswith("les:")}
 
 
 def check(given, q):
@@ -42,7 +49,36 @@ def handle(action, ctx):
                    "focus": [{"key": k, "name": n[lang]} for k, n in g["focus"]]} for g in C.GROUPS]
         return {"name": me["name"], "lang": lang, "xp": mu["xp"], "streak": E.streak(con, uid, KEY),
                 "today": E.today_count(con, uid, KEY), "goal": E.DAILY_GOAL, "groups": groups,
-                "weak_count": len(weak_set(con, uid))}
+                "weak_count": len(weak_set(con, uid)),
+                "lessons_done": sum(1 for b in lesson_status(con, uid).values() if b >= 5), "lessons_total": len(L.LESSONS)}
+
+    if action == "lessons":
+        st = lesson_status(con, uid)
+        return [{"id": l["id"], "title": l["title"], "short": l["short"], "done": st.get(l["id"], 0) >= 5,
+                 "tried": l["id"] in st} for l in L.LESSONS]
+
+    if action == "lesson":
+        lid = ctx.qs.get("id", [""])[0]
+        if lid not in L.LESSON_BY_ID:
+            raise ApiError(404, "Lesson not found")
+        ids = [l["id"] for l in L.LESSONS]
+        i = ids.index(lid)
+        return {**L.public(L.LESSON_BY_ID[lid]), "next": ids[i + 1] if i + 1 < len(ids) else None}
+
+    if action == "lesson/done":
+        b = ctx.body()
+        lid = b.get("id")
+        if lid not in L.LESSON_BY_ID:
+            raise ApiError(404, "Lesson not found")
+        total = max(1, int(b.get("total") or 1))
+        score = max(0, min(total, int(b.get("score") or 0)))
+        passed = score / total >= 0.6
+        con.execute("""INSERT INTO progress(user_id,module,key,box,seen,wrong,last_ts) VALUES(?,?,?,?,1,?,strftime('%s','now'))
+                       ON CONFLICT(user_id,module,key) DO UPDATE SET box=MAX(box, excluded.box), seen=seen+1,
+                       wrong=wrong+excluded.wrong, last_ts=excluded.last_ts""",
+                    (uid, KEY, "les:" + lid, 5 if passed else 1, total - score))
+        E.add_xp(con, uid, KEY, 5 * score)
+        return {"passed": passed, "xp_gained": 5 * score}
 
     if action == "alphabet":
         return {"letters": C.alphabet(lang), "groups": {g: n[lang] for g, (n, _) in C.LETTER_GROUPS.items()}}
