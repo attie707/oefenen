@@ -351,7 +351,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(404, "No sound")
             self.send(200, res[0], res[1], {"Cache-Control": "private, max-age=604800"})
             return None
-        if method == "GET" and action not in ("home", "stats", "alphabet"):
+        if method == "GET" and action not in ("home", "stats", "alphabet") + tuple(getattr(mod, "GET_ACTIONS", ())):
             raise ApiError(405, "Not allowed")
         return mod.handle(action, Ctx(self, con, me, qs))
 

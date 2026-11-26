@@ -4,6 +4,7 @@ import re
 import engine as E
 from engine import ApiError
 from . import content as C
+from . import lessons as L
 
 KEY = "nederlands"
 ICON = "🇳🇱"
@@ -12,10 +13,16 @@ DESC = {"en": "Words, verbs, sentences and listening (A1–A2)",
         "nl": "Woorden, werkwoorden, zinnen en luisteren (A1–A2)"}
 TTS_LANG, TTS_AZURE, TTS_PIPER = "nl-NL", "nl-NL-FennaNeural", "nl_BE-nathalie-medium"
 MODE_NAMES = {k: v["name"] for k, v in C.EXERCISES.items()}
+GET_ACTIONS = ("lessons", "lesson")
 
 
 def phrases():
-    return C.all_phrases()
+    return C.all_phrases() | L.phrases()
+
+
+def lesson_status(con, uid):
+    rows = con.execute("SELECT key, box FROM progress WHERE user_id=? AND module=? AND key LIKE 'les:%'", (uid, KEY)).fetchall()
+    return {r["key"][4:]: r["box"] for r in rows}
 
 
 def weak_set(con, uid):
@@ -37,7 +44,36 @@ def handle(action, ctx):
         mu = E.module_user(con, uid, KEY)
         return {"name": me["name"], "role": me["role"], "xp": mu["xp"], "streak": E.streak(con, uid, KEY),
                 "today": E.today_count(con, uid, KEY), "goal": E.DAILY_GOAL, "groups": C.GROUPS,
-                "weak_count": len(weak_set(con, uid))}
+                "weak_count": len(weak_set(con, uid)),
+                "lessons_done": sum(1 for b in lesson_status(con, uid).values() if b >= 5), "lessons_total": len(L.LESSONS)}
+
+    if action == "lessons":
+        st = lesson_status(con, uid)
+        return [{"id": l["id"], "title": l["title"], "short": l["short"], "done": st.get(l["id"], 0) >= 5,
+                 "tried": l["id"] in st} for l in L.LESSONS]
+
+    if action == "lesson":
+        lid = ctx.qs.get("id", [""])[0]
+        if lid not in L.LESSON_BY_ID:
+            raise ApiError(404, "Les niet gevonden")
+        ids = [l["id"] for l in L.LESSONS]
+        i = ids.index(lid)
+        return {**L.public(L.LESSON_BY_ID[lid]), "next": ids[i + 1] if i + 1 < len(ids) else None}
+
+    if action == "lesson/done":
+        b = ctx.body()
+        lid = b.get("id")
+        if lid not in L.LESSON_BY_ID:
+            raise ApiError(404, "Les niet gevonden")
+        total = max(1, int(b.get("total") or 1))
+        score = max(0, min(total, int(b.get("score") or 0)))
+        passed = score / total >= 0.6
+        con.execute("""INSERT INTO progress(user_id,module,key,box,seen,wrong,last_ts) VALUES(?,?,?,?,1,?,strftime('%s','now'))
+                       ON CONFLICT(user_id,module,key) DO UPDATE SET box=MAX(box, excluded.box), seen=seen+1,
+                       wrong=wrong+excluded.wrong, last_ts=excluded.last_ts""",
+                    (uid, KEY, "les:" + lid, 5 if passed else 1, total - score))
+        E.add_xp(con, uid, KEY, 5 * score)
+        return {"passed": passed, "xp_gained": 5 * score}
 
     if action == "question":
         b = ctx.body()
@@ -64,8 +100,13 @@ def handle(action, ctx):
         E.record_answer(con, uid, KEY, q["ex"], None, q["item"], grp, cat, prompt, given, q["answer"], result)
         xp = {2: E.XP_CORRECT, 1: E.XP_ALMOST, 0: 0}[result]
         E.add_xp(con, uid, KEY, xp)
+        lesson = None
+        if q["item"] in C.SENTS:
+            lid = L.LESSON_FOR_CAT.get(C.SENTS[q["item"]]["cat"])
+            if lid:
+                lesson = {"id": lid, "title": L.LESSON_BY_ID[lid]["title"]}
         return {"result": ["wrong", "almost", "correct"][result], "answer": q["answer"], "accepted": q["accepted"],
-                "say": q["say"], "info": q.get("info"), "kind": q["kind"],
+                "say": q["say"], "info": q.get("info"), "kind": q["kind"], "lesson": lesson,
                 "xp_gained": xp, "xp": E.module_user(con, uid, KEY)["xp"],
                 "today": E.today_count(con, uid, KEY), "goal": E.DAILY_GOAL}
 
