@@ -118,6 +118,14 @@ out=/root/oefenen-$(date +%F).db
 python3 -c "import sqlite3,sys;s=sqlite3.connect(sys.argv[1]);d=sqlite3.connect(sys.argv[2]);s.backup(d)" /var/lib/oefenen/oefenen.db "$out"
 echo "Backup: $out"
 BAK
+cat > /usr/local/bin/oefenen-admin.new <<'ADM'
+#!/usr/bin/env bash
+# Account tool: oefenen-admin list | reset <username> | role <username> <student|teacher|admin>
+exec runuser -u oefenen -- env DATA_DIR=/var/lib/oefenen python3 /opt/oefenen/app/manage.py "$@"
+ADM
+chmod +x /usr/local/bin/oefenen-admin.new
+mv -f /usr/local/bin/oefenen-admin.new /usr/local/bin/oefenen-admin
+ln -sf /usr/local/bin/oefenen-admin /usr/sbin/oefenen-admin
 chmod +x /usr/local/bin/update.new /usr/local/bin/backup.new
 mv -f /usr/local/bin/update.new /usr/local/bin/update
 mv -f /usr/local/bin/backup.new /usr/local/bin/backup
