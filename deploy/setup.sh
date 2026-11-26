@@ -10,7 +10,7 @@ PORT=8080
 DIR=/opt/$APP
 DATA=/var/lib/$APP
 # Piper voices used by the subjects:  <path on huggingface>/<voice name>
-VOICES="fr/fr_FR/siwis/medium/fr_FR-siwis-medium nl/nl_BE/nathalie/medium/nl_BE-nathalie-medium"
+VOICES="fr/fr_FR/siwis/medium/fr_FR-siwis-medium nl/nl_BE/nathalie/medium/nl_BE-nathalie-medium uk/uk_UA/ukrainian_tts/medium/uk_UA-ukrainian_tts-medium"
 
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }

@@ -170,7 +170,7 @@ def recent_mistakes(con, uid, module, n=15):
 # ---------------- answer checking ----------------
 def normalize(s):
     s = (s or "").strip().lower().rstrip(".!? ")
-    s = re.sub(r"[’‘`´]", "'", s)
+    s = re.sub(r"[’‘`´ʼ]", "'", s)
     s = re.sub(r"\s+", " ", s)
     s = re.sub(r"\s*'\s*", "'", s)
     return s.rstrip(".!? ")

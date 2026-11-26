@@ -1,0 +1,23 @@
+body.m-oekraiens{--blue:#0057b7}
+body.m-oekraiens .top{border-bottom:4px solid #ffd700}
+.flag.uk{flex-direction:column}.flag.uk i:nth-child(1){background:#0057b7}.flag.uk i:nth-child(2){background:#ffd700}
+.cyr{font-size:40px;font-weight:800;letter-spacing:.5px}
+.letter-big{font-size:84px;font-weight:800;line-height:1.05}
+.tr{color:var(--ink2);font-style:italic;font-size:16px;font-weight:500;margin-top:2px}
+.hide-latin .tr{display:none}
+.opt .tr{font-size:13px;margin:0 0 0 8px}
+.options.letter{grid-template-columns:repeat(5,1fr)}.options.letter .opt{font-size:30px;justify-content:center;position:relative;padding:14px 4px}
+.options.letter .opt .n{position:absolute;top:4px;left:4px;width:20px;height:20px;font-size:11px}
+.tilebtn .tr{display:block;font-size:11px;margin:0}
+.kbd{display:grid;gap:5px;margin-top:12px;user-select:none}
+.kbd .krow{display:flex;gap:4px;justify-content:center}
+.kbd button{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1.5px #c3c2b7;padding:10px 0;font-size:19px;font-weight:600;flex:1;max-width:46px;min-width:0;border-radius:8px}
+.kbd button.wide{max-width:none;flex:3}.kbd button.mid{max-width:none;flex:1.5}
+.kbd button:active{background:var(--blue-soft)}
+.abc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.abc{background:#fff;border-radius:12px;padding:12px;box-shadow:0 0 0 1px rgba(11,11,11,.08);text-align:center}
+.abc .L{font-size:40px;font-weight:800;line-height:1.1}.abc .s{font-weight:700;color:var(--blue)}
+.abc .h{font-size:12px;color:var(--ink2);min-height:30px;margin:4px 0}.abc .w{font-size:15px}
+.switch{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink2);cursor:pointer}
+.switch input{width:auto}
+@media (max-width:520px){.cyr{font-size:32px}.letter-big{font-size:70px}.options.letter .opt{font-size:24px}.kbd button{font-size:16px;padding:9px 0}}
