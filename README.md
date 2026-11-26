@@ -46,6 +46,16 @@ The platform runs on port **8080**. Point Nginx Proxy Manager or the Cloudflare 
 - https is detected automatically (via the `X-Forwarded-Proto` header from Nginx Proxy Manager or Cloudflare)
 - `AZURE_TTS_KEY=...` and `AZURE_TTS_REGION=westeurope` for the most natural voices (free tier is plenty, since sounds are cached)
 
+## Log in with Google (Cloudflare Access)
+Put Cloudflare Access (Zero Trust, free up to 50 users) with Google as login method in front of the public hostname,
+then add to `/etc/oefenen-tts.env` and run `update`:
+```
+CF_ACCESS_TEAM=yourteam.cloudflareaccess.com
+CF_ACCESS_AUD=<Application Audience (AUD) Tag>
+```
+Link each account to its Google address under **Admin → E-mail**. The app verifies Cloudflare's signed token
+(RS256, audience, issuer, expiry) before it trusts the address. Password login keeps working on the local address.
+
 ## Adding a subject
 Create `app/modules/<name>/__init__.py` (with `KEY`, `ICON`, `TITLE`, `DESC`, TTS voice, `MODE_NAMES`, `phrases()` and
 `handle(action, ctx)`), add the page in `app/static/<name>/`, and list the module in `app/modules/__init__.py`.

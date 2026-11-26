@@ -78,6 +78,11 @@ ENV
   chmod 600 /etc/oefenen-tts.env
 fi
 
+grep -q CF_ACCESS_TEAM /etc/oefenen-tts.env || cat >> /etc/oefenen-tts.env <<'ENV'
+# Optional: log in with Google via Cloudflare Access. Fill in both, then run 'update'.
+#CF_ACCESS_TEAM=yourteam.cloudflareaccess.com
+#CF_ACCESS_AUD=paste-the-Application-Audience-AUD-tag-here
+ENV
 sed -i 's/^COOKIE_SECURE=1/#COOKIE_SECURE=1 (no longer needed, https is detected automatically)/' /etc/oefenen-tts.env
 
 # ---- service ----
@@ -138,7 +143,7 @@ systemctl enable "$APP" >/dev/null 2>&1
 systemctl restart "$APP"
 sleep 3
 if systemctl is-active --quiet "$APP"; then
-  journalctl -u "$APP" -n 30 --no-pager -o cat | grep -E '^(Imported|Speech|Oefenen)' | sort -u || true
+  journalctl -u "$APP" -n 30 --no-pager -o cat | grep -E '^(Imported|Speech|Oefenen|Single)' | sort -u || true
   say "Oefenen is running on port $PORT"
 else
   warn "$APP did not start. See: journalctl -u $APP -n 50"

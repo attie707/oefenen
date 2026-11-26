@@ -11,6 +11,10 @@ const TXT = {
     welcome: "Welcome!", setup_intro: "First create an administrator account. After that you can add the rest of the family.",
     name: "Name", username: "Username", password: "Password", create_account: "Create account",
     hello: "Hello!", login: "Log in",
+    sso_unlinked: e => `You are signed in with Google as <b>${e}</b>, but no account here is linked to that address yet. Ask the administrator to add it (Admin → e-mail), or log in with your username and password.`,
+    email: "Google e-mail", email_hint: "Optional. With this address the person can log in with Google (via Cloudflare Access).",
+    set_email: "E-mail", email_prompt: n => `Google e-mail address for ${n} (leave empty to remove):`, email_saved: "E-mail saved",
+    linked_google: "Linked Google account", via_google: "You are logged in with Google.", not_linked: "not linked",
     cookie_lost: "Your password was correct, but this browser did not keep the login. Allow cookies for this site, or try the https address.",
     new_pw: "New password", new_pw_intro: n => `Hi ${n}! Please choose a new, strong password before you continue.`,
     current_pw: "Current (temporary) password", current_pw2: "Current password", new_pw_label: "New password", new_pw_again: "New password again",
@@ -42,6 +46,10 @@ const TXT = {
     welcome: "Welkom!", setup_intro: "Maak eerst een beheerdersaccount aan. Daarna kun je de rest van de familie toevoegen.",
     name: "Naam", username: "Gebruikersnaam", password: "Wachtwoord", create_account: "Account aanmaken",
     hello: "Hallo!", login: "Inloggen",
+    sso_unlinked: e => `Je bent met Google ingelogd als <b>${e}</b>, maar dat adres hoort nog bij geen enkel account. Vraag de beheerder om het toe te voegen (Beheer → e-mail), of log in met je gebruikersnaam en wachtwoord.`,
+    email: "Google-e-mailadres", email_hint: "Optioneel. Met dit adres kan iemand inloggen met Google (via Cloudflare Access).",
+    set_email: "E-mail", email_prompt: n => `Google-e-mailadres voor ${n} (leeg laten om te verwijderen):`, email_saved: "E-mail opgeslagen",
+    linked_google: "Gekoppeld Google-account", via_google: "Je bent ingelogd met Google.", not_linked: "niet gekoppeld",
     cookie_lost: "Je wachtwoord klopte, maar deze browser heeft de login niet bewaard. Sta cookies toe voor deze site, of probeer het https-adres.",
     new_pw: "Nieuw wachtwoord", new_pw_intro: n => `Hallo ${n}! Kies eerst een nieuw, sterk wachtwoord voordat je verder gaat.`,
     current_pw: "Huidig (tijdelijk) wachtwoord", current_pw2: "Huidig wachtwoord", new_pw_label: "Nieuw wachtwoord", new_pw_again: "Nieuw wachtwoord nog een keer",
@@ -110,6 +118,12 @@ function makePassword() {
   return w[a] + "-" + w[b] + (10 + r(90)) + "!?#@"[r(4)];
 }
 
+async function logout() {
+  const r = await api("logout", {});
+  if (r.sso_logout) { location.href = r.sso_logout; return; }
+  location.hash = "#/"; render();
+}
+
 // ---------- router ----------
 window.addEventListener("hashchange", render);
 async function render() {
@@ -158,6 +172,7 @@ function viewSetup() {
 function viewLogin() {
   app.innerHTML = `<div class="card" style="max-width:420px;margin:30px auto">${langSwitch()}
     <h1>${t("hello")} 🎓</h1>
+    ${ST.sso && ST.sso.unlinked_email ? `<div class="banner">${t("sso_unlinked", esc(ST.sso.unlinked_email))}</div>` : ""}
     <form id="f"><label>${t("username")}</label><input name="username" autocapitalize="none" autocomplete="username" required>
     <label>${t("password")}</label><input name="password" type="password" autocomplete="current-password" required>
     <div class="error" id="err"></div><br><button style="width:100%">${t("login")}</button></form></div>`;
@@ -188,7 +203,7 @@ function viewForceChange() {
     try { await api("password", { old: e.target.old.value, new: $("#pw1").value }); toast(t("pw_saved")); location.hash = "#/"; render(); }
     catch (er) { $("#err").textContent = er.message; }
   };
-  $("#out").onclick = async () => { await api("logout", {}); location.hash = "#/"; render(); };
+  $("#out").onclick = logout;
 }
 
 // ---------- landing page ----------
@@ -240,7 +255,8 @@ async function viewAdmin(msg) {
     ${typeof msg === "string" ? `<div class="banner">${msg}</div>` : ""}
     <p class="small muted">${t("roles_explained")}</p>
     <div class="card"><div class="tablewrap"><table class="list"><tr><th>${t("name")}</th><th>${t("role")}</th><th>${t("today")}</th><th>${t("total")}</th><th>${t("last_active")}</th><th></th></tr>
-    ${users.map(u => `<tr><td><b>${esc(u.name)}</b><div class="small muted">${esc(u.username)}${u.must_change ? " · 🔒" : ""}</div></td><td>${roleSel(u)}</td>
+    ${users.map(u => `<tr><td><b>${esc(u.name)}</b><div class="small muted">${esc(u.username)}${u.must_change ? " · 🔒" : ""}</div>
+      <div class="small">${u.email ? `✉️ ${esc(u.email)}` : ""} <button class="link small" data-email="${u.id}" data-name="${esc(u.name)}" data-cur="${esc(u.email || "")}">${t("set_email")}</button></div></td><td>${roleSel(u)}</td>
       <td>${u.today}</td><td>${u.total}</td><td class="small">${agoTs(u.last_ts)}</td>
       <td><div class="row"><button class="link" data-pw="${u.id}" data-name="${esc(u.name)}">${t("temp_pw")}</button>
       ${u.id !== ME.id ? `<button class="link" style="color:var(--bad)" data-del="${u.id}" data-name="${esc(u.name)}">${t("delete")}</button>` : ""}</div></td></tr>`).join("")}
@@ -250,9 +266,10 @@ async function viewAdmin(msg) {
       <div><label>${t("name")}</label><input name="name" required></div>
       <div><label>${t("username")}</label><input name="username" autocapitalize="none" required></div>
       <div><label>${t("role")}</label><select name="role"><option value="student">${t("r_student")}</option><option value="teacher">${t("r_teacher")}</option><option value="admin">${t("r_admin")}</option></select></div>
+      <div><label>${t("email")}</label><input name="email" type="email" autocapitalize="none" placeholder="name@gmail.com"></div>
       <div><label>${t("language")}</label><select name="lang"><option value="en">English</option><option value="nl">Nederlands</option></select></div>
       <div><label>${t("temp_pw")}</label><div class="row" style="flex-wrap:nowrap"><input name="password" id="newpw" required><button type="button" class="secondary" id="gen" title="🎲">🎲</button></div></div>
-    </div><p class="small muted">${t("first_login_note")}</p>
+    </div><p class="small muted">${t("first_login_note")} ${t("email_hint")}</p>
     <div class="error" id="err"></div><button>${t("add")}</button></form>`;
   const np = $("#newpw"); np.value = makePassword();
   pwChecklist(np, () => $("#f [name=username]").value);
@@ -273,6 +290,11 @@ async function viewAdmin(msg) {
     try { await api("users/password", { id: +b.dataset.pw, password: pw }); viewAdmin(`${t("temp_for", esc(b.dataset.name))} <span class="temp-pw">${esc(pw)}</span>`); }
     catch (er) { toast(er.message); }
   });
+  app.querySelectorAll("[data-email]").forEach(b => b.onclick = async () => {
+    const v = prompt(t("email_prompt", b.dataset.name), b.dataset.cur);
+    if (v === null) return;
+    try { await api("users/email", { id: +b.dataset.email, email: v }); toast(t("email_saved")); viewAdmin(); } catch (er) { toast(er.message); }
+  });
   app.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     if (!confirm(t("confirm_delete", b.dataset.name))) return;
     try { await api("users/delete", { id: +b.dataset.del }); toast(t("deleted")); viewAdmin(); } catch (er) { toast(er.message); }
@@ -287,6 +309,7 @@ function viewSettings() {
       <label>${t("display_name")}</label><div class="row" style="flex-wrap:nowrap"><input id="nm" value="${esc(ME.name)}"><button id="savename">${t("save")}</button></div>
     </div>
     <div class="card" style="max-width:520px">
+      <p class="small">${t("linked_google")}: <b>${esc(ME.email || t("not_linked"))}</b>${ME.sso ? ` · ${t("via_google")}` : ""}</p>
       <h3>${t("change_pw")}</h3>
       <p class="small muted">${t("logged_in")} <b>${esc(ME.username)}</b> <span class="role ${ME.role}">${esc(ME.role_name)}</span></p>
       <form id="f"><label>${t("current_pw2")}</label><input name="old" type="password" autocomplete="current-password" required>
@@ -306,7 +329,7 @@ function viewSettings() {
     try { await api("password", { old: e.target.old.value, new: $("#pw1").value }); toast(t("pw_changed")); e.target.reset(); $("#pw1").dispatchEvent(new Event("input")); }
     catch (er) { $("#err").textContent = er.message; }
   };
-  $("#out").onclick = async () => { await api("logout", {}); location.hash = "#/"; render(); };
+  $("#out").onclick = logout;
 }
 
 render();

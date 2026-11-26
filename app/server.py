@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import engine as E
+import sso
 from engine import ApiError
 from modules import MODULES
 from tts import TTS
@@ -81,6 +82,12 @@ def init_db():
         CREATE INDEX IF NOT EXISTS ix_answers_user ON answers(user_id, module, id);
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         """)
+        ucols = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+        if "email" not in ucols:
+            con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        scols = {r[1] for r in con.execute("PRAGMA table_info(sessions)")}
+        if "via" not in scols:
+            con.execute("ALTER TABLE sessions ADD COLUMN via TEXT NOT NULL DEFAULT 'password'")
         migrate_legacy(con)
 
 
@@ -203,6 +210,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", headers.pop("Cache-Control", "no-store"))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
+        if getattr(self, "_set_cookie", None) and "Set-Cookie" not in headers:
+            headers["Set-Cookie"] = self._set_cookie
         for k, v in headers.items():
             self.send_header(k, v)
         self.end_headers()
@@ -222,18 +231,43 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, "Invalid JSON")
 
     def token(self):
+        if getattr(self, "_sso_token", None):
+            return self._sso_token
         c = SimpleCookie(self.headers.get("Cookie") or "")
         return c["sid"].value if "sid" in c else None
+
+    def sso_login(self, con):
+        """Log in automatically when Cloudflare Access vouches for an e-mail address that belongs to an account."""
+        self.sso_email = None
+        if not sso.ENABLED:
+            return
+        tok = self.token()
+        if tok and con.execute("SELECT 1 FROM sessions WHERE token=? AND created>?",
+                               (tok, time.time() - SESSION_DAYS * 86400)).fetchone():
+            return
+        c = SimpleCookie(self.headers.get("Cookie") or "")
+        jwt = self.headers.get("Cf-Access-Jwt-Assertion") or (c["CF_Authorization"].value if "CF_Authorization" in c else "")
+        email = sso.email_from(jwt)
+        if not email:
+            return
+        self.sso_email = email
+        u = con.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
+        if u:
+            new = secrets.token_urlsafe(32)
+            con.execute("INSERT INTO sessions(token,user_id,created,via) VALUES(?,?,?,'sso')", (new, u["id"], int(time.time())))
+            con.commit()
+            self._sso_token = new
+            self._set_cookie = self.cookie(new, SESSION_DAYS * 86400)
 
     def user(self, con, required=True, admin=False, staff=False, pending_ok=False):
         tok, u = self.token(), None
         if tok:
-            u = con.execute("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.created>?",
+            u = con.execute("SELECT u.*, s.via AS via FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.created>?",
                             (tok, time.time() - SESSION_DAYS * 86400)).fetchone()
         if required and not u:
             raise ApiError(401, MSG["not_logged_in"]["en"])
         lang = u["lang"] if u else "en"
-        if u and u["must_change"] and not pending_ok:
+        if u and u["must_change"] and u["via"] != "sso" and not pending_ok:
             raise ApiError(403, "must_change")
         if admin and u["role"] != "admin":
             raise ApiError(403, MSG["admin_only"][lang])
@@ -273,6 +307,7 @@ class Handler(BaseHTTPRequestHandler):
     def route(self, method):
         url = urlparse(self.path)
         path, qs = url.path, parse_qs(url.query)
+        self._sso_token = self._set_cookie = self.sso_email = None
         try:
             if not path.startswith("/api/"):
                 if method != "GET":
@@ -281,6 +316,7 @@ class Handler(BaseHTTPRequestHandler):
             con = db()
             try:
                 with con:
+                    self.sso_login(con)
                     if path.startswith("/api/m/"):
                         res = self.module_call(con, path[7:], method, qs)
                     else:
@@ -334,12 +370,14 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------- account ----------------
     def me_json(self, u):
         return {"id": u["id"], "name": u["name"], "username": u["username"], "role": u["role"],
-                "role_name": ROLES[u["role"]][u["lang"]], "must_change": bool(u["must_change"]), "lang": u["lang"]}
+                "role_name": ROLES[u["role"]][u["lang"]], "lang": u["lang"], "email": u["email"],
+                "must_change": bool(u["must_change"]) and u["via"] != "sso", "sso": u["via"] == "sso"}
 
     def api_get_state(self, con, qs):
         setup = con.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         u = None if setup else self.user(con, required=False, pending_ok=True)
         return {"setup_needed": setup, "pw_min": PW_MIN, "user": self.me_json(u) if u else None,
+                "sso": {"enabled": sso.ENABLED, "unlinked_email": None if u else getattr(self, "sso_email", None)},
                 "modules": [{"key": k, "icon": m.ICON, "title": m.TITLE, "desc": m.DESC, "tts": SPEECH[k].engine}
                             for k, m in MODULES.items()]}
 
@@ -362,15 +400,35 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, {"en": "That username already exists", "nl": "Die gebruikersnaam bestaat al"}[lang])
         user_lang = b.get("lang") if b.get("lang") in LANGS else "en"
         h, salt = hash_pw(pw)
-        cur = con.execute("INSERT INTO users(username,name,role,pw_hash,salt,created,must_change,lang) VALUES(?,?,?,?,?,?,?,?)",
-                          (username, name[:40], role, h, salt, int(time.time()), must_change, user_lang))
+        email = self._clean_email(con, b.get("email"), lang)
+        cur = con.execute("INSERT INTO users(username,name,role,pw_hash,salt,created,must_change,lang,email) VALUES(?,?,?,?,?,?,?,?,?)",
+                          (username, name[:40], role, h, salt, int(time.time()), must_change, user_lang, email))
         if login:
             return self._login(con, cur.lastrowid)
         return {"ok": True, "id": cur.lastrowid}
 
+    def _clean_email(self, con, email, lang, uid=None):
+        email = (email or "").strip().lower()
+        if not email:
+            return None
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ApiError(400, {"en": "That is not a valid e-mail address", "nl": "Dat is geen geldig e-mailadres"}[lang])
+        if con.execute("SELECT 1 FROM users WHERE lower(email)=? AND id<>?", (email, uid or 0)).fetchone():
+            raise ApiError(400, {"en": "That e-mail address is already linked to another account",
+                                 "nl": "Dat e-mailadres hoort al bij een ander account"}[lang])
+        return email
+
+    def api_post_users_email(self, con, qs):
+        me = self.user(con, admin=True)
+        b = self.body()
+        email = self._clean_email(con, b.get("email"), me["lang"], b.get("id"))
+        con.execute("UPDATE users SET email=? WHERE id=?", (email, b.get("id")))
+        con.execute("DELETE FROM sessions WHERE user_id=? AND via='sso'", (b.get("id"),))
+        return {"ok": True}
+
     def _login(self, con, uid):
         tok = secrets.token_urlsafe(32)
-        con.execute("INSERT INTO sessions VALUES(?,?,?)", (tok, uid, int(time.time())))
+        con.execute("INSERT INTO sessions(token,user_id,created,via) VALUES(?,?,?,'password')", (tok, uid, int(time.time())))
         con.execute("DELETE FROM sessions WHERE created<?", (time.time() - SESSION_DAYS * 86400,))
         con.commit()
         self.send(200, {"ok": True}, headers={"Set-Cookie": self.cookie(tok, SESSION_DAYS * 86400)})
@@ -392,9 +450,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_post_logout(self, con, qs):
         tok = self.token()
+        via = None
         if tok:
+            r = con.execute("SELECT via FROM sessions WHERE token=?", (tok,)).fetchone()
+            via = r["via"] if r else None
             con.execute("DELETE FROM sessions WHERE token=?", (tok,))
-        self.send(200, {"ok": True}, headers={"Set-Cookie": self.cookie("", 0)})
+        con.commit()
+        # after a Google login, also end the Cloudflare Access session, otherwise you'd be logged in again at once
+        self.send(200, {"ok": True, "sso_logout": "/cdn-cgi/access/logout" if via == "sso" else None},
+                  headers={"Set-Cookie": self.cookie("", 0)})
 
     def api_post_password(self, con, qs):
         me = self.user(con, pending_ok=True)
@@ -431,7 +495,7 @@ class Handler(BaseHTTPRequestHandler):
     def api_get_users(self, con, qs):
         me = self.user(con, staff=True)
         out = []
-        for u in con.execute("SELECT id, username, name, role, must_change, lang FROM users "
+        for u in con.execute("SELECT id, username, name, role, must_change, lang, email FROM users "
                              "ORDER BY CASE role WHEN 'student' THEN 0 WHEN 'teacher' THEN 1 ELSE 2 END, name"):
             if me["role"] != "admin" and u["role"] != "student":
                 continue
@@ -518,6 +582,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     init_db()
+    print(f"Single sign-on: {'Cloudflare Access (' + sso.TEAM + ')' if sso.ENABLED else 'off'}", flush=True)
     for s in SPEECH.values():
         s.prewarm()
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
