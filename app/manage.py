@@ -4,6 +4,7 @@
   oefenen-admin reset <username>     give the account a new temporary password (must be changed at login)
   oefenen-admin role <username> <student|teacher|admin>
   oefenen-admin email <username> <address>   link a Google address (use "-" to remove)
+  oefenen-admin delete <username>            delete the account and all its scores
 """
 import hashlib
 import os
@@ -57,6 +58,20 @@ def main(args):
         with con:
             n = con.execute("UPDATE users SET email=? WHERE username=?", (addr, user)).rowcount
         print(f"{user} -> {addr or '(no e-mail)'}" if n else f"No account '{user}'")
+        return
+    if args[0] == "delete" and len(args) == 2:
+        user = args[1].lower()
+        u = con.execute("SELECT id, name, role FROM users WHERE username=?", (user,)).fetchone()
+        if not u:
+            sys.exit(f"No account '{user}'")
+        if u[2] == "admin" and con.execute("SELECT COUNT(*) FROM users WHERE role='admin'").fetchone()[0] <= 1:
+            sys.exit("This is the only administrator; make someone else administrator first.")
+        n = con.execute("SELECT COUNT(*) FROM answers WHERE user_id=?", (u[0],)).fetchone()[0]
+        with con:
+            for t in ("sessions", "progress", "answers", "module_users"):
+                con.execute(f"DELETE FROM {t} WHERE user_id=?", (u[0],))
+            con.execute("DELETE FROM users WHERE id=?", (u[0],))
+        print(f"Deleted {user} ({u[1]}) and {n} answers")
         return
     print(__doc__)
 
