@@ -1,7 +1,7 @@
 """Oefenen: one learning platform, one login, several subjects (modules).
 
 Start:  python server.py   (port 8080, database in ./data/oefenen.db)
-Environment: PORT, DATA_DIR, COOKIE_SECURE=1 (when served over https),
+Environment: PORT, DATA_DIR (the login cookie is marked Secure automatically when the visitor uses https via a proxy),
              LEGACY_DBS="frans=/path/frans.db,nederlands=/path/nederlands.db" (one-time import)
 """
 import csv
@@ -28,7 +28,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(HERE, "data"))
 DB_PATH = os.path.join(DATA_DIR, "oefenen.db")
 STATIC = os.path.join(HERE, "static")
-COOKIE_SECURE = os.environ.get("COOKIE_SECURE") == "1"
 SESSION_DAYS = 30
 LANGS = ("en", "nl")
 ROLES = {"student": {"en": "Student", "nl": "Leerling"},
@@ -253,8 +252,16 @@ class Handler(BaseHTTPRequestHandler):
             return u
         return me
 
+    def via_https(self):
+        """True when the visitor uses https through a proxy (Nginx Proxy Manager, Cloudflare)."""
+        proto = (self.headers.get("X-Forwarded-Proto") or "").lower()
+        return proto == "https" or '"https"' in (self.headers.get("CF-Visitor") or "")
+
     def cookie(self, value, max_age):
-        return f"sid={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}" + ("; Secure" if COOKIE_SECURE else "")
+        # Secure only when the browser really talks https; otherwise the browser would silently drop the
+        # cookie on a plain http address (e.g. http://192.168.1.130:8080) and login would seem to do nothing.
+        secure = self.via_https()
+        return f"sid={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}" + ("; Secure" if secure else "")
 
     # ---- routing ----
     def do_GET(self):

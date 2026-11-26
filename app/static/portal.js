@@ -11,6 +11,7 @@ const TXT = {
     welcome: "Welcome!", setup_intro: "First create an administrator account. After that you can add the rest of the family.",
     name: "Name", username: "Username", password: "Password", create_account: "Create account",
     hello: "Hello!", login: "Log in",
+    cookie_lost: "Your password was correct, but this browser did not keep the login. Allow cookies for this site, or try the https address.",
     new_pw: "New password", new_pw_intro: n => `Hi ${n}! Please choose a new, strong password before you continue.`,
     current_pw: "Current (temporary) password", current_pw2: "Current password", new_pw_label: "New password", new_pw_again: "New password again",
     save_continue: "Save and continue", logout: "Log out", pw_mismatch: "The two new passwords are not the same",
@@ -41,6 +42,7 @@ const TXT = {
     welcome: "Welkom!", setup_intro: "Maak eerst een beheerdersaccount aan. Daarna kun je de rest van de familie toevoegen.",
     name: "Naam", username: "Gebruikersnaam", password: "Wachtwoord", create_account: "Account aanmaken",
     hello: "Hallo!", login: "Inloggen",
+    cookie_lost: "Je wachtwoord klopte, maar deze browser heeft de login niet bewaard. Sta cookies toe voor deze site, of probeer het https-adres.",
     new_pw: "Nieuw wachtwoord", new_pw_intro: n => `Hallo ${n}! Kies eerst een nieuw, sterk wachtwoord voordat je verder gaat.`,
     current_pw: "Huidig (tijdelijk) wachtwoord", current_pw2: "Huidig wachtwoord", new_pw_label: "Nieuw wachtwoord", new_pw_again: "Nieuw wachtwoord nog een keer",
     save_continue: "Opslaan en verder", logout: "Uitloggen", pw_mismatch: "De twee nieuwe wachtwoorden zijn niet hetzelfde",
@@ -162,8 +164,12 @@ function viewLogin() {
   bindLangSwitch(viewLogin);
   $("#f").onsubmit = async e => {
     e.preventDefault();
-    try { await api("login", Object.fromEntries(new FormData(e.target))); render(); }
-    catch (er) { $("#err").textContent = er.message; }
+    try {
+      await api("login", Object.fromEntries(new FormData(e.target)));
+      const st = await api("state");
+      if (!st.user) { $("#err").textContent = t("cookie_lost"); return; }
+      render();
+    } catch (er) { $("#err").textContent = er.message; }
   };
 }
 function viewForceChange() {

@@ -73,11 +73,12 @@ if [ ! -f /etc/oefenen-tts.env ]; then
 # Optional: Microsoft Azure neural voices (most natural). Free tier F0 = 500,000 characters/month.
 #AZURE_TTS_KEY=paste-your-key-here
 #AZURE_TTS_REGION=westeurope
-# Only when the site is reached through https (Nginx Proxy Manager / Cloudflare):
-#COOKIE_SECURE=1
+# (COOKIE_SECURE is no longer needed: https is detected automatically.)
 ENV
   chmod 600 /etc/oefenen-tts.env
 fi
+
+sed -i 's/^COOKIE_SECURE=1/#COOKIE_SECURE=1 (no longer needed, https is detected automatically)/' /etc/oefenen-tts.env
 
 # ---- service ----
 cat > /etc/systemd/system/$APP.service <<UNIT

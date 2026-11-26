@@ -43,7 +43,7 @@ The platform runs on port **8080**. Point Nginx Proxy Manager or the Cloudflare 
 | Logs | `pct exec 108 -- journalctl -u oefenen -f` |
 
 ## Settings (`/etc/oefenen-tts.env` inside the container, then `update`)
-- `COOKIE_SECURE=1` when the site is used via https
+- https is detected automatically (via the `X-Forwarded-Proto` header from Nginx Proxy Manager or Cloudflare)
 - `AZURE_TTS_KEY=...` and `AZURE_TTS_REGION=westeurope` for the most natural voices (free tier is plenty, since sounds are cached)
 
 ## Adding a subject
