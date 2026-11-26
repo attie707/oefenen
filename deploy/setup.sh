@@ -83,6 +83,9 @@ grep -q GEMINI_API_KEY /etc/oefenen-tts.env || cat >> /etc/oefenen-tts.env <<'EN
 # Every sound is made only once and then saved. Run 'update' after filling in.
 #GEMINI_API_KEY=paste-your-key-here
 #GEMINI_TTS_VOICE=Kore
+# Cost brakes: max Gemini sounds per day (default 600), and 0 = only make a sound when someone taps 🔊
+#GEMINI_DAILY_LIMIT=600
+#GEMINI_PREWARM=0
 ENV
 grep -q CF_ACCESS_TEAM /etc/oefenen-tts.env || cat >> /etc/oefenen-tts.env <<'ENV'
 # Optional: log in with Google via Cloudflare Access. Fill in both, then run 'update'.

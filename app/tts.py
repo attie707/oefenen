@@ -32,6 +32,23 @@ GEMINI_MODELS = [m for m in [os.environ.get("GEMINI_TTS_MODEL", "").strip(), "ge
                              "gemini-3.8-flash-tts-preview", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"] if m]
 LANG_NAMES = {"uk": "Ukrainian", "fr": "French", "nl": "Dutch", "en": "English"}
 GEMINI_CACHE = "g2"          # bump to make all Gemini sounds again
+# Cost brakes: max Gemini sounds per day (all subjects together), and whether to make all sounds in advance
+GEMINI_DAILY_LIMIT = int(os.environ.get("GEMINI_DAILY_LIMIT", "600") or 0)
+GEMINI_PREWARM = os.environ.get("GEMINI_PREWARM", "1") != "0"
+_DAY = {"date": "", "n": 0}
+_DAY_LOCK = threading.Lock()
+
+
+def _count_gemini_request():
+    """Returns False when today's Gemini budget is used up."""
+    today = time.strftime("%Y-%m-%d")
+    with _DAY_LOCK:
+        if _DAY["date"] != today:
+            _DAY.update(date=today, n=0)
+        if GEMINI_DAILY_LIMIT and _DAY["n"] >= GEMINI_DAILY_LIMIT:
+            return False
+        _DAY["n"] += 1
+        return True
 
 
 class TTS:
@@ -130,7 +147,7 @@ class TTS:
             return os.path.exists(path)
         except RateLimited as e:
             self.cooldown[eng] = time.time() + e.wait
-            print(f"Speech {self.lang}: {eng} limit reached, pausing {e.wait // 60} min ({e})", flush=True)
+            print(f"Speech {self.lang}: {eng} limit reached, pausing {e.wait // 60} min ({e}); using the next voice meanwhile", flush=True)
             return False
         except Exception as e:  # noqa
             if eng == self.engine:
@@ -140,6 +157,10 @@ class TTS:
 
     # ---------- Google Gemini ----------
     def _gemini(self, text, path):
+        if not _count_gemini_request():
+            now = time.localtime()
+            until_midnight = (23 - now.tm_hour) * 3600 + (59 - now.tm_min) * 60 + 60
+            raise RateLimited(f"daily limit of {GEMINI_DAILY_LIMIT} Gemini sounds reached (GEMINI_DAILY_LIMIT)", until_midnight)
         prompt = f"{self.gemini_style} {text}" if self.gemini_style else text
         last = None
         for model in list(self.gemini_models):
@@ -240,7 +261,7 @@ class TTS:
 
     # ---------- prepare everything in the background ----------
     def prewarm(self):
-        if not self.engine:
+        if not self.engine or (self.engine == "gemini" and not GEMINI_PREWARM):
             return
         # Gemini: gently (free tier has request limits); local engines: as fast as possible
         gap = 6.5 if self.engine == "gemini" else 0.05

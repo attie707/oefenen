@@ -49,7 +49,8 @@ The platform runs on port **8080**. Point Nginx Proxy Manager or the Cloudflare 
 - https is detected automatically (via the `X-Forwarded-Proto` header from Nginx Proxy Manager or Cloudflare)
 - `GEMINI_API_KEY=...` for the most natural voices (Google Gemini TTS, all languages). Needs a project with billing
   linked (the free tier allows only a handful of requests a day); all sounds together cost about €1–2 once, since
-  every sound is saved. Optional: `GEMINI_TTS_VOICE` (default Kore), `GEMINI_TTS_MODEL`.
+  every sound is saved. Optional: `GEMINI_TTS_VOICE` (default Kore), `GEMINI_TTS_MODEL`, `GEMINI_DAILY_LIMIT` (max sounds per day, default 600),
+  `GEMINI_PREWARM=0` (only make a sound when someone taps 🔊).
 - `AZURE_TTS_KEY=...` and `AZURE_TTS_REGION=westeurope` as an alternative
 - Order: Gemini → Azure → Piper (local) → the browser's own voice; if one fails, the next is used
 
