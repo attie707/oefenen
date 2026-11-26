@@ -3,6 +3,7 @@
   oefenen-admin list                 show all accounts
   oefenen-admin reset <username>     give the account a new temporary password (must be changed at login)
   oefenen-admin role <username> <student|teacher|admin>
+  oefenen-admin email <username> <address>   link a Google address (use "-" to remove)
 """
 import hashlib
 import os
@@ -22,10 +23,12 @@ def temp_password():
 def main(args):
     con = sqlite3.connect(DB, timeout=10)
     if not args or args[0] == "list":
-        rows = con.execute("SELECT id, username, name, role, must_change FROM users ORDER BY id").fetchall()
-        print("%-4s %-18s %-22s %-8s %s" % ("id", "username", "name", "role", "must change password"))
+        cols = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+        email = "email" if "email" in cols else "''"
+        rows = con.execute(f"SELECT id, username, name, role, must_change, {email} FROM users ORDER BY id").fetchall()
+        print("%-4s %-16s %-20s %-8s %-6s %s" % ("id", "username", "name", "role", "newpw", "google e-mail"))
         for r in rows:
-            print("%-4s %-18s %-22s %-8s %s" % (r[0], r[1], r[2], r[3], "yes" if r[4] else "-"))
+            print("%-4s %-16s %-20s %-8s %-6s %s" % (r[0], r[1], r[2], r[3], "yes" if r[4] else "-", r[5] or "-"))
         return
     if args[0] == "reset" and len(args) == 2:
         user = args[1].strip().lower()
@@ -43,6 +46,17 @@ def main(args):
         with con:
             n = con.execute("UPDATE users SET role=? WHERE username=?", (args[2], args[1].lower())).rowcount
         print("Done" if n else f"No account '{args[1]}'")
+        return
+    if args[0] == "email" and len(args) == 3:
+        user, addr = args[1].lower(), args[2].strip().lower()
+        addr = None if addr == "-" else addr
+        if addr and ("@" not in addr or "." not in addr.split("@")[-1]):
+            sys.exit(f"'{addr}' is not a valid e-mail address")
+        if addr and con.execute("SELECT 1 FROM users WHERE lower(email)=? AND username<>?", (addr, user)).fetchone():
+            sys.exit(f"{addr} is already linked to another account")
+        with con:
+            n = con.execute("UPDATE users SET email=? WHERE username=?", (addr, user)).rowcount
+        print(f"{user} -> {addr or '(no e-mail)'}" if n else f"No account '{user}'")
         return
     print(__doc__)
 
