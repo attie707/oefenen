@@ -251,8 +251,12 @@ class Handler(BaseHTTPRequestHandler):
         if not email:
             return
         self.sso_email = email
-        u = con.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
+        u = con.execute("SELECT id, must_change FROM users WHERE lower(email)=?", (email,)).fetchone()
         if u:
+            if u["must_change"]:
+                # first Google login: retire the temporary password, the account is now 'Google only'
+                h, salt = hash_pw(secrets.token_urlsafe(24))
+                con.execute("UPDATE users SET pw_hash=?, salt=?, must_change=0 WHERE id=?", (h, salt, u["id"]))
             new = secrets.token_urlsafe(32)
             con.execute("INSERT INTO sessions(token,user_id,created,via) VALUES(?,?,?,'sso')", (new, u["id"], int(time.time())))
             con.commit()

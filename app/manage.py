@@ -5,6 +5,9 @@
   oefenen-admin role <username> <student|teacher|admin>
   oefenen-admin email <username> <address>   link a Google address (use "-" to remove)
   oefenen-admin delete <username>            delete the account and all its scores
+  oefenen-admin add <username> "<name>" <student|teacher|admin> <google-address> [en|nl]
+                                             new account that logs in with Google (no password needed)
+  oefenen-admin google-only <username>       retire the (temporary) password: log in with Google only
 """
 import hashlib
 import os
@@ -72,6 +75,39 @@ def main(args):
                 con.execute(f"DELETE FROM {t} WHERE user_id=?", (u[0],))
             con.execute("DELETE FROM users WHERE id=?", (u[0],))
         print(f"Deleted {user} ({u[1]}) and {n} answers")
+        return
+    if args[0] == "add" and len(args) in (5, 6) and args[3] in ("student", "teacher", "admin"):
+        user, name, role, addr = args[1].strip().lower(), args[2].strip(), args[3], args[4].strip().lower()
+        lang = args[5] if len(args) == 6 and args[5] in ("en", "nl") else "en"
+        if not user.replace(".", "").replace("_", "").replace("-", "").isalnum() or not 2 <= len(user) <= 30:
+            sys.exit("Username: 2-30 characters, only letters, digits, . _ -")
+        if "@" not in addr:
+            sys.exit(f"'{addr}' is not a valid e-mail address")
+        if con.execute("SELECT 1 FROM users WHERE username=?", (user,)).fetchone():
+            sys.exit(f"Account '{user}' already exists")
+        if con.execute("SELECT 1 FROM users WHERE lower(email)=?", (addr,)).fetchone():
+            sys.exit(f"{addr} is already linked to another account")
+        salt = secrets.token_hex(16)
+        h = hashlib.pbkdf2_hmac("sha256", secrets.token_urlsafe(24).encode(), salt.encode(), 200_000).hex()
+        with con:
+            con.execute("INSERT INTO users(username,name,role,pw_hash,salt,created,must_change,lang,email) "
+                        "VALUES(?,?,?,?,?,strftime('%s','now'),0,?,?)", (user, name or user, role, h, salt, lang, addr))
+        print(f"Created {user} ({name}, {role}, {lang}) - logs in with Google as {addr}")
+        print("Make sure this address is also in the Cloudflare Access policy.")
+        return
+    if args[0] == "google-only" and len(args) == 2:
+        user = args[1].lower()
+        u = con.execute("SELECT email FROM users WHERE username=?", (user,)).fetchone()
+        if not u:
+            sys.exit(f"No account '{user}'")
+        if not u[0]:
+            sys.exit(f"{user} has no Google address yet. First: oefenen-admin email {user} <address>")
+        salt = secrets.token_hex(16)
+        h = hashlib.pbkdf2_hmac("sha256", secrets.token_urlsafe(24).encode(), salt.encode(), 200_000).hex()
+        with con:
+            con.execute("UPDATE users SET pw_hash=?, salt=?, must_change=0 WHERE username=?", (h, salt, user))
+            con.execute("DELETE FROM sessions WHERE user_id=(SELECT id FROM users WHERE username=?) AND via<>'sso'", (user,))
+        print(f"{user} now logs in with Google only ({u[0]}). 'oefenen-admin reset {user}' gives a password again.")
         return
     print(__doc__)
 
