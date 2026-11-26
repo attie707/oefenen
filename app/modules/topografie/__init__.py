@@ -10,7 +10,7 @@ ICON = "🗺️"
 TITLE = {"en": "Topography Europe", "nl": "Topografie Europa"}
 DESC = {"en": "The 45 countries of Europe: find them on the map and name them",
         "nl": "De 45 landen van Europa: aanwijzen op de kaart en de naam weten"}
-TTS_LANG, TTS_AZURE, TTS_PIPER = "nl-NL", "nl-NL-FennaNeural", "nl_BE-nathalie-medium"
+TTS_LANG, TTS_AZURE, TTS_PIPER = None, None, None   # no sound in this subject
 
 # number on the worksheet: (name, other accepted spellings)
 COUNTRIES = {

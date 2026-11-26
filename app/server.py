@@ -40,8 +40,9 @@ PW_MIN = 10
 FAILS = defaultdict(list)
 
 os.makedirs(DATA_DIR, exist_ok=True)
+# subjects with TTS_LANG = None have no sound at all
 SPEECH = {k: TTS(os.path.join(DATA_DIR, k), m.TTS_LANG, m.TTS_AZURE, m.phrases(), piper_voice=m.TTS_PIPER)
-          for k, m in MODULES.items()}
+          for k, m in MODULES.items() if getattr(m, "TTS_LANG", None)}
 
 MSG = {
     "not_logged_in": {"en": "Not logged in", "nl": "Niet ingelogd"},
@@ -346,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(404, "Unknown subject")
         me = self.user(con)
         if action == "tts" and method == "GET":
-            res = SPEECH[key].get(qs.get("t", [""])[0])
+            res = SPEECH[key].get(qs.get("t", [""])[0]) if key in SPEECH else None
             if not res:
                 raise ApiError(404, "No sound")
             self.send(200, res[0], res[1], {"Cache-Control": "private, max-age=604800"})
@@ -382,7 +383,7 @@ class Handler(BaseHTTPRequestHandler):
         u = None if setup else self.user(con, required=False, pending_ok=True)
         return {"setup_needed": setup, "pw_min": PW_MIN, "user": self.me_json(u) if u else None,
                 "sso": {"enabled": sso.ENABLED, "unlinked_email": None if u else getattr(self, "sso_email", None)},
-                "modules": [{"key": k, "icon": m.ICON, "title": m.TITLE, "desc": m.DESC, "tts": SPEECH[k].engine}
+                "modules": [{"key": k, "icon": m.ICON, "title": m.TITLE, "desc": m.DESC, "tts": SPEECH[k].engine if k in SPEECH else None}
                             for k, m in MODULES.items()]}
 
     def api_post_setup(self, con, qs):

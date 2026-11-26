@@ -3,7 +3,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const app = $("#app");
 const esc = Portal.esc;
 const MODULE = "topografie";
-let ME = null, TTS_SERVER = false, MAP = null, HOME = null, cleanup = null;
+let ME = null, MAP = null, HOME = null, cleanup = null;
 
 // ---------- helpers ----------
 async function api(path, body) {
@@ -21,23 +21,6 @@ function toast(msg, ms = 2400) {
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const PRAISE = ["Goed zo!", "Super!", "Helemaal goed!", "Knap!", "Top!", "Prima!"];
 const OOPS = ["Helaas!", "Bijna, kijk goed:", "Jammer!", "Niet erg!"];
-
-// speech: server voice, otherwise the browser
-let nlVoice = null;
-function loadVoices() { const v = speechSynthesis.getVoices(); nlVoice = v.find(x => x.lang === "nl-NL") || v.find(x => x.lang.startsWith("nl")) || null; }
-if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
-const player = new Audio();
-async function say(text) {
-  if (TTS_SERVER) {
-    try { player.pause(); player.src = `/api/m/${MODULE}/tts?v=2&t=` + encodeURIComponent(text); await player.play(); return; } catch (e) { /* fallback */ }
-  }
-  if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text); u.lang = "nl-NL"; if (nlVoice) u.voice = nlVoice; u.rate = 0.95;
-  speechSynthesis.speak(u);
-}
-const sayBtn = t => `<button class="say" data-say="${esc(t)}" title="Luister">🔊</button>`;
-document.addEventListener("click", e => { const b = e.target.closest("[data-say]"); if (b) { e.preventDefault(); say(b.dataset.say); } });
 
 // ---------- map ----------
 const PALETTE = ["#f6c28b", "#f3a683", "#a8d5a2", "#f7d794", "#e8a5c5", "#c5b3e6", "#9ad0e0"];
@@ -91,7 +74,7 @@ async function render() {
   if (cleanup) { cleanup(); cleanup = null; }
   const b = await Portal.boot(MODULE);
   if (!b) return;
-  ME = b.me; TTS_SERVER = b.tts;
+  ME = b.me;
   await loadMap();
   HOME = await api("home");
   const [route, a, c] = location.hash.replace(/^#\/?/, "").split("/");
@@ -141,14 +124,14 @@ function viewFocus(ex) {
 // ---------- practising ----------
 function promptHTML(q) {
   const p = q.prompt;
-  return `<div class="q-text">${esc(p.text)}</div>${p.big ? `<div class="q-big">${esc(p.big)}${q.kind === "click" || q.kind === "number" ? "?" : ""} ${sayBtn(p.big)}</div>` : ""}`;
+  return `<div class="q-text">${esc(p.text)}</div>${p.big ? `<div class="q-big">${esc(p.big)}${q.kind === "click" || q.kind === "number" ? "?" : ""}</div>` : ""}`;
 }
 function feedbackHTML(res) {
   const ok = res.result === "correct";
   const t = ok ? pick(PRAISE) : res.result === "almost" ? "Bijna! Let op de spelling (puntjes ¨)." : pick(OOPS);
   return `<div class="feedback ${res.result} pop"><div class="title">${ok ? "✅" : res.result === "almost" ? "🟡" : "❌"} ${esc(t)}
     ${res.xp_gained ? `<span class="small muted">+${res.xp_gained}</span>` : ""}</div>
-    <div class="sol">${res.num}. ${esc(res.name)} ${sayBtn(res.say)}</div></div>`;
+    <div class="sol">${res.num}. ${esc(res.name)}</div></div>`;
 }
 
 // One question on the screen. onDone(res) is called after answering.
@@ -179,7 +162,6 @@ async function showQuestion(container, ex, focus, onDone, opts = {}) {
     });
     if (inp) { inp.readOnly = true; inp.style.borderColor = res.result === "correct" ? "var(--good)" : res.result === "almost" ? "var(--warn)" : "var(--bad)"; }
     if (res.result === "wrong") container.classList.add("shake");
-    say(res.say);
     onDone(res, q);
   }
   if (q.kind === "click") $("#mapbox", container).addEventListener("click", e => {
@@ -246,7 +228,7 @@ async function viewToets(focus) {
     app.innerHTML = `<h1>📝 Klaar!</h1><div class="card center">
       <div class="grade">${grade.toFixed(1).replace(".", ",")}</div>
       <p>${points} van de ${N} goed (${pct}%) ${pct >= r.best && pct > 0 ? "· 🏆 je beste score!" : `· beste: ${r.best}%`}</p>
-      ${wrong.length ? `<h3>Nog even oefenen:</h3><p>${wrong.map(w => `${w.num}. ${esc(w.name)} ${sayBtn(w.name)}`).join("<br>")}</p>` : "<p>Alles goed! 🎉</p>"}
+      ${wrong.length ? `<h3>Nog even oefenen:</h3><p>${wrong.map(w => `${w.num}. ${esc(w.name)}`).join("<br>")}</p>` : "<p>Alles goed! 🎉</p>"}
       <div class="row" style="justify-content:center"><a class="btn" href="#/toets/${focus}" onclick="setTimeout(render)">Nog een keer</a><a class="btn secondary" href="#/">Klaar</a></div></div>`;
   }
   const key = e => { if (e.key === "Enter" && $("#nx")) { e.preventDefault(); $("#nx").click(); } };
@@ -273,7 +255,7 @@ function viewKaart(view = "alle") {
       const el = e.target.closest("[data-n]"); if (!el) return;
       const c = MAP.countries[el.dataset.n];
       $("#mapbox").innerHTML = mapSVG({ view, numbers, names, clickable: true, marks: { [el.dataset.n]: "right" } });
-      toast(`${el.dataset.n}. ${c.name}`); say(c.name);
+      toast(`${el.dataset.n}. ${c.name}`);
     });
   };
   draw();
