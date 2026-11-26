@@ -7,8 +7,10 @@ It's pure Python with **no dependencies** and uses SQLite for storage, with natu
 |---|---|---|
 | 🇫🇷 French | Dutch-speaking pupils | être, avoir, -er verbs: quiz, spelling levels, listening/dictation, speed round |
 | 🇳🇱 Dutch | beginners (A1–A2), all in Dutch | words with pictures (de/het), verbs in 3 tenses, word order, listening |
+| 🗺️ Topography Europe | groep 7/8, in Dutch | the 45 countries of the school worksheet *Landen in Europa [1]* with the same numbers: find on the map, name it, find the number, type it, practice test with a grade |
 
-More subjects (Ukrainian, topography of Europe) are coming as modules in `app/modules/`.
+The map is generated from [Natural Earth](https://www.naturalearthdata.com) (public domain) with `tools/build_map.py`.
+More subjects (Ukrainian) are coming as modules in `app/modules/`.
 
 ## Roles
 | Role | Can do |

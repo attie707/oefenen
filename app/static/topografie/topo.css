@@ -1,0 +1,26 @@
+body.m-topografie{--blue:#0f5e6e}
+body.m-topografie .top{border-bottom:4px solid #f4a259}
+.map-wrap{background:#cfe8f5;border-radius:12px;overflow:hidden;margin-top:12px;touch-action:manipulation}
+.map{display:block;width:100%;height:auto;max-height:68vh}
+.map .sea{fill:#cfe8f5}
+.map .other{fill:#e4e4de;stroke:#fff;stroke-width:.6}
+.map .c{stroke:#fff;stroke-width:.7;transition:fill .15s}
+.map.clickable .c,.map.clickable .hit{cursor:pointer}
+.map.clickable .c:hover{filter:brightness(.92)}
+.map .c.hl{fill:#ff7a00 !important;stroke:#7a3200;stroke-width:1.4}
+.map .c.right{fill:#0ca30c !important}
+.map .c.wrong{fill:#d03b3b !important}
+.map .num{font:700 13px system-ui,sans-serif;fill:#0f3d4a;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:#fff;stroke-width:3px;pointer-events:none}
+.map .name{font:600 10px system-ui,sans-serif;fill:#1b1b1b;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:#fff;stroke-width:2.5px;pointer-events:none}
+.map .dot{stroke:#7a3200;stroke-width:1}
+.map .hit{fill:transparent}
+.q-big{font-size:30px;font-weight:800;text-align:center}
+.q-text{color:var(--ink2);text-align:center;font-size:17px}
+.regions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.regions button{padding:7px 12px;font-size:14px}
+.steps .tile .pct{font-size:13px;color:var(--ink2);margin-top:6px}
+.toets-bar{height:8px;background:var(--line);border-radius:9px;overflow:hidden;margin:6px 0 10px}.toets-bar i{display:block;height:100%;background:#f4a259}
+.grade{font-size:72px;font-weight:800;color:var(--blue);line-height:1}
+.country-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:14.5px}
+.country-row .nm{width:190px}.country-row .bar{flex:1}.country-row .pc{width:86px;text-align:right;font-size:12.5px;color:var(--ink2)}
+@media (max-width:520px){.q-big{font-size:25px}.country-row .nm{width:140px}}
