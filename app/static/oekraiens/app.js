@@ -128,6 +128,8 @@ async function render() {
   $("#nav-abc").textContent = t("abc"); $("#nav-scores").textContent = t("scores"); $("#nav-staff").textContent = t("students");
   setLatin(LATIN);
   HOME = await api("home");
+  if (HOME.lang && HOME.lang !== LANG) { LANG = HOME.lang; document.documentElement.lang = LANG;
+    $("#nav-abc").textContent = t("abc"); $("#nav-scores").textContent = t("scores"); $("#nav-staff").textContent = t("students"); }
   const [route, a, c] = location.hash.replace(/^#\/?/, "").split("/");
   const views = { "": viewHome, groep: viewGroup, oefen: viewPlay, abetka: viewAlphabet, scores: viewScores };
   (views[route] || viewHome)(a, c);

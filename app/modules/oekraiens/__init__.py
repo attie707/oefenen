@@ -11,6 +11,8 @@ TITLE = {"en": "Ukrainian", "nl": "Oekraïens"}
 DESC = {"en": "Cyrillic alphabet, words and phrases for talking with the family",
         "nl": "Het Cyrillische alfabet, woorden en zinnetjes om met de familie te praten"}
 TTS_LANG, TTS_AZURE, TTS_PIPER = "uk-UA", "uk-UA-PolinaNeural", "uk_UA-ukrainian_tts-medium"
+# The family learns Ukrainian through English. Set to None to follow each user's language setting (en/nl) instead.
+FIXED_LANG = "en"
 MODE_NAMES = {k: v["en"][0] for k, v in C.EXERCISES.items()}
 
 
@@ -31,7 +33,7 @@ def check(given, q):
 
 def handle(action, ctx):
     con, me = ctx.con, ctx.me
-    uid, lang = me["id"], me["lang"]
+    uid, lang = me["id"], FIXED_LANG or me["lang"]
 
     if action == "home":
         mu = E.module_user(con, uid, KEY)
