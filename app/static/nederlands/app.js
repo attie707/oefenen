@@ -38,7 +38,7 @@ async function say(text, slow = false) {
   if (TTS_SERVER) {
     try {
       player.pause();
-      player.src = `/api/m/${MODULE}/tts?t=` + encodeURIComponent(text);
+      player.src = `/api/m/${MODULE}/tts?v=2&t=` + encodeURIComponent(text);
       player.defaultPlaybackRate = player.playbackRate = slow ? 0.7 : 1;
       await player.play();
       return;

@@ -9,7 +9,8 @@ Every sound is generated once and stored in DATA_DIR/<subject>/audio.
 Only texts that occur in the app (allowed) are spoken, so nobody can use up your quota.
 
 Optional settings: GEMINI_TTS_MODEL (default below), GEMINI_TTS_VOICE (default Kore),
-GEMINI_TTS_STYLE (spoken-style instruction; set to "-" to send the bare text), TTS_ENGINE=gemini|azure|piper.
+GEMINI_TTS_STYLE (optional style instruction placed before the text; off by default, because with short
+words Gemini sometimes reads the instruction aloud), TTS_ENGINE=gemini|azure|piper.
 """
 import base64
 import hashlib
@@ -30,8 +31,7 @@ GEMINI_BASE = os.environ.get("GEMINI_BASE", "https://generativelanguage.googleap
 GEMINI_MODELS = [m for m in [os.environ.get("GEMINI_TTS_MODEL", "").strip(), "gemini-3.8-flash-tts",
                              "gemini-3.8-flash-tts-preview", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"] if m]
 LANG_NAMES = {"uk": "Ukrainian", "fr": "French", "nl": "Dutch", "en": "English"}
-DEFAULT_STYLE = ("Read the following {language} text aloud exactly as written, clearly and at a calm pace, "
-                 "like a friendly teacher for a beginner. Say nothing else:")
+GEMINI_CACHE = "g2"          # bump to make all Gemini sounds again
 
 
 class TTS:
@@ -48,8 +48,8 @@ class TTS:
         self.gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
         self.gemini_models = list(GEMINI_MODELS)
         self.gemini_voice = os.environ.get("GEMINI_TTS_VOICE", "Kore").strip()
-        style = os.environ.get("GEMINI_TTS_STYLE", DEFAULT_STYLE)
-        self.gemini_style = "" if style.strip() == "-" else style.replace("{language}", LANG_NAMES.get(lang[:2], ""))
+        style = os.environ.get("GEMINI_TTS_STYLE", "").strip()
+        self.gemini_style = "" if style in ("", "-") else style.replace("{language}", LANG_NAMES.get(lang[:2], ""))
         self.gemini_lang_code = True
         # Azure
         self.azure_key = os.environ.get("AZURE_TTS_KEY", "").strip()
@@ -69,11 +69,33 @@ class TTS:
         if os.path.exists(self.piper_py) and os.path.exists(self.piper_model):
             self.engines.append("piper")             # always kept as a fallback when installed
         self.engine = self.engines[0] if self.engines else None
+        if "gemini" in self.engines:
+            self._clean_old_gemini()
         desc = ", then ".join(f"{e} ({self._voice(e)})" for e in self.engines) or "browser"
         print(f"Speech {lang}: {desc}", flush=True)
 
+    def _clean_old_gemini(self):
+        """One time: remove Gemini sounds made with the old spoken instruction (24 kHz WAVs without the g2 tag)."""
+        marker = os.path.join(self.dir, ".gemini-" + GEMINI_CACHE)
+        if os.path.exists(marker):
+            return
+        n = 0
+        for f in os.listdir(self.dir):
+            if f.endswith(".wav"):
+                try:
+                    with wave.open(os.path.join(self.dir, f)) as w:
+                        rate = w.getframerate()
+                    if rate == 24000:                # Gemini; Piper voices are 22.05 kHz
+                        os.remove(os.path.join(self.dir, f))
+                        n += 1
+                except Exception:  # noqa
+                    pass
+        open(marker, "w").close()
+        if n:
+            print(f"Speech {self.lang}: removed {n} old Gemini sounds, they will be made again", flush=True)
+
     def _voice(self, engine):
-        return {"gemini": self.gemini_voice, "azure": self.azure_voice,
+        return {"gemini": self.gemini_voice + "-" + GEMINI_CACHE, "azure": self.azure_voice,
                 "piper": os.path.basename(self.piper_model)}.get(engine, "")
 
     # ---------- cache ----------
@@ -160,6 +182,12 @@ class TTS:
                 raise RuntimeError("no audio in the answer")
             pcm = base64.b64decode(audio["data"])
             rate = int((re.search(r"rate=(\d+)", audio.get("mimeType", "")) or [0, 24000])[1])
+            seconds = len(pcm) / 2 / rate
+            if seconds > 2.5 + len(text) / 4:        # much longer than the text: it said something extra
+                if self.gemini_style:
+                    self.gemini_style = ""           # drop the instruction and try once more with the bare text
+                    return self._gemini(text, path)
+                raise RuntimeError(f"audio too long ({seconds:.1f}s for {len(text)} characters), not saved")
             tmp = path + ".tmp"
             with wave.open(tmp, "wb") as w:
                 w.setnchannels(1)

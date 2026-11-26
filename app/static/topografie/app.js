@@ -29,7 +29,7 @@ if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged
 const player = new Audio();
 async function say(text) {
   if (TTS_SERVER) {
-    try { player.pause(); player.src = `/api/m/${MODULE}/tts?t=` + encodeURIComponent(text); await player.play(); return; } catch (e) { /* fallback */ }
+    try { player.pause(); player.src = `/api/m/${MODULE}/tts?v=2&t=` + encodeURIComponent(text); await player.play(); return; } catch (e) { /* fallback */ }
   }
   if (!("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
