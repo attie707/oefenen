@@ -78,6 +78,12 @@ ENV
   chmod 600 /etc/oefenen-tts.env
 fi
 
+grep -q GEMINI_API_KEY /etc/oefenen-tts.env || cat >> /etc/oefenen-tts.env <<'ENV'
+# Best voices: Google Gemini TTS. Key from https://aistudio.google.com/apikey (project with billing linked).
+# Every sound is made only once and then saved. Run 'update' after filling in.
+#GEMINI_API_KEY=paste-your-key-here
+#GEMINI_TTS_VOICE=Kore
+ENV
 grep -q CF_ACCESS_TEAM /etc/oefenen-tts.env || cat >> /etc/oefenen-tts.env <<'ENV'
 # Optional: log in with Google via Cloudflare Access. Fill in both, then run 'update'.
 #CF_ACCESS_TEAM=yourteam.cloudflareaccess.com

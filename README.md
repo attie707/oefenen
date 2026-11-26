@@ -47,7 +47,11 @@ The platform runs on port **8080**. Point Nginx Proxy Manager or the Cloudflare 
 
 ## Settings (`/etc/oefenen-tts.env` inside the container, then `update`)
 - https is detected automatically (via the `X-Forwarded-Proto` header from Nginx Proxy Manager or Cloudflare)
-- `AZURE_TTS_KEY=...` and `AZURE_TTS_REGION=westeurope` for the most natural voices (free tier is plenty, since sounds are cached)
+- `GEMINI_API_KEY=...` for the most natural voices (Google Gemini TTS, all languages). Needs a project with billing
+  linked (the free tier allows only a handful of requests a day); all sounds together cost about €1–2 once, since
+  every sound is saved. Optional: `GEMINI_TTS_VOICE` (default Kore), `GEMINI_TTS_MODEL`.
+- `AZURE_TTS_KEY=...` and `AZURE_TTS_REGION=westeurope` as an alternative
+- Order: Gemini → Azure → Piper (local) → the browser's own voice; if one fails, the next is used
 
 ## Log in with Google (Cloudflare Access)
 Put Cloudflare Access (Zero Trust, free up to 50 users) with Google as login method in front of the public hostname,
