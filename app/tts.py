@@ -133,7 +133,12 @@ class TTS:
                 with urllib.request.urlopen(req, timeout=60) as r:
                     data = json.loads(r.read())
             except urllib.error.HTTPError as e:
-                msg = e.read().decode(errors="replace")[:300]
+                raw = e.read().decode(errors="replace")
+                try:                                  # Google's errors are JSON: keep only the message
+                    msg = json.loads(raw)["error"]["message"]
+                except Exception:  # noqa
+                    msg = " ".join(raw.split())
+                msg = msg[:300]
                 if e.code == 429:
                     raise RateLimited(msg, 600)
                 if e.code == 404:                     # model not available: try the next one
@@ -143,7 +148,7 @@ class TTS:
                 if e.code == 400 and "languageCode" in msg and self.gemini_lang_code:
                     self.gemini_lang_code = False    # older models: let Gemini detect the language
                     return self._gemini(text, path)
-                if e.code in (401, 403):
+                if e.code in (401, 403) or (e.code == 400 and "API key" in msg):
                     raise RateLimited(f"key refused: {msg}", 3600)
                 raise RuntimeError(f"HTTP {e.code}: {msg}")
             if self.gemini_models[0] != model:
